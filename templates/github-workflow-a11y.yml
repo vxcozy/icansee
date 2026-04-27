@@ -1,0 +1,71 @@
+# icansee — full axe-core accessibility audit on every PR.
+#
+# Runs against the built+served site, so it catches what a static pre-commit
+# gate cannot: rendered-DOM contrast, landmark coverage, focus state.
+# Same engine as the Vercel toolbar's Accessibility Audit Tool.
+#
+# Routes to scan are read from .icansee/routes.json (a JSON array of paths).
+# Default is ["/"] — extend it with the routes you care about.
+
+name: Accessibility audit (axe-core)
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+jobs:
+  axe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Determine routes
+        id: routes
+        run: |
+          if [ -f .icansee/routes.json ]; then
+            ROUTES=$(cat .icansee/routes.json | python3 -c 'import json,sys; print(" ".join(json.load(sys.stdin)))')
+          else
+            ROUTES="/"
+          fi
+          echo "list=$ROUTES" >> "$GITHUB_OUTPUT"
+
+      - name: Start app and run axe-core
+        run: |
+          # Start the app in the background. Override SERVE_CMD via env if your
+          # project uses a different start command (e.g. `npm run preview`).
+          SERVE_CMD="${SERVE_CMD:-npm start}"
+          $SERVE_CMD &
+          APP_PID=$!
+          # Wait for the server. Override BASE_URL if not localhost:3000.
+          BASE_URL="${BASE_URL:-http://localhost:3000}"
+          npx --yes wait-on "$BASE_URL" --timeout 60000
+
+          FAIL=0
+          for route in ${{ steps.routes.outputs.list }}; do
+            URL="${BASE_URL}${route}"
+            echo "::group::axe $URL"
+            npx --yes @axe-core/cli "$URL" \
+              --tags wcag2a,wcag2aa,wcag21a,wcag21aa \
+              --exit || FAIL=1
+            echo "::endgroup::"
+          done
+
+          kill $APP_PID || true
+          exit $FAIL
+        env:
+          # Set in repo settings if you need a custom port or start command.
+          BASE_URL: ${{ vars.ICANSEE_BASE_URL }}
+          SERVE_CMD: ${{ vars.ICANSEE_SERVE_CMD }}

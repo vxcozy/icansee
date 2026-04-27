@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# icansee — pre-commit accessibility gate
+#
+# Runs static a11y checks against staged files only. Blocks the commit on
+# any finding. Bypass with `git commit --no-verify` (you'll see it in the log).
+#
+# This file is dropped in by `icansee/scripts/install.sh`. The path to the
+# skill's audit.sh is substituted at install time.
+
+set -e
+
+ICANSEE_DIR="__ICANSEE_DIR__"
+"$ICANSEE_DIR/scripts/audit.sh" --staged
