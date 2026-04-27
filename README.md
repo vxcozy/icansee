@@ -25,7 +25,7 @@ framework-agnostic; it runs against whatever you build and serve.
 The skill lives at `~/.claude/skills/icansee/`:
 
 ```bash
-git clone <this-repo> ~/.claude/skills/icansee
+git clone https://github.com/vxcozy/icansee.git ~/.claude/skills/icansee
 ```
 
 Or symlink from a development checkout:
