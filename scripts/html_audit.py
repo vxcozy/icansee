@@ -196,7 +196,7 @@ class A11yHTMLParser(HTMLParser):
         # Generic structural checks not tied to a single tag
         self._check_role_img(ctx)
 
-        # Self-closing void elements get no end tag — finalize them now.
+        # Self-closing void elements get no end tag. Finalize them now.
         if tag in _VOID_ELEMENTS:
             self._finalize(ctx)
             self.stack.pop()
@@ -211,7 +211,7 @@ class A11yHTMLParser(HTMLParser):
                 if tag == "title":
                     self.in_title = False
                 return
-        # Stray end tag — ignore.
+        # Stray end tag. Ignore.
 
     def handle_data(self, data: str) -> None:
         for ctx in self.stack:
@@ -296,7 +296,7 @@ class A11yHTMLParser(HTMLParser):
             # submit/reset have user-agent default labels, hidden has no UI.
             return
         else:
-            # Form-field — needs a label of some kind. Defer until we've seen
+            # Form-field. Needs a label of some kind. Defer until we've seen
             # all <label for> targets; queue and resolve in close().
             self.form_fields.append(ctx)
 
@@ -365,7 +365,7 @@ class A11yHTMLParser(HTMLParser):
             )
 
     def _check_object(self, ctx: _ElementContext) -> None:
-        # Validated at close — needs inner text or aria-label[ledby].
+        # Validated at close. Needs inner text or aria-label[ledby].
         pass
 
     def _check_role_img(self, ctx: _ElementContext) -> None:
@@ -381,7 +381,7 @@ class A11yHTMLParser(HTMLParser):
                 )
 
     def _check_svg(self, ctx: _ElementContext) -> None:
-        # Resolved at close — if role="img", needs <title> child or aria-label.
+        # Resolved at close. If role="img", needs <title> child or aria-label.
         pass
 
     # ---- close-time finalization -----------------------------------------
@@ -411,7 +411,7 @@ class A11yHTMLParser(HTMLParser):
                 self._add(ctx, "object-alt", "<object> has no accessible name")
 
         if tag == "svg" and a.get("role") == "img":
-            # Did we see a <title> child? Inspect text_buf — close events
+            # Did we see a <title> child? Inspect text_buf. Close events
             # for descendants flush their text into our buffer too.
             # Simpler check: text content includes a non-empty string OR aria-label.
             has_label = bool(a.get("aria-label") or a.get("aria-labelledby"))

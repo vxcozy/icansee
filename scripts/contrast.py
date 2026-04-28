@@ -90,7 +90,7 @@ def composite(fg: RGBA, bg: RGBA) -> RGBA:
     if fg.a == 1.0:
         return fg
     if bg.a != 1.0:
-        # Caller error — the underlying canvas must be opaque to compute a
+        # Caller error. The underlying canvas must be opaque to compute a
         # meaningful contrast ratio. Tell them.
         raise ValueError(
             "Background must be fully opaque to composite. "
@@ -236,7 +236,7 @@ def evaluate(ratio: float) -> dict:
 
 
 def best_level(ratio: float, text_size: str) -> str:
-    """Highest level passed — 'AAA', 'AA', or 'fail'."""
+    """Highest level passed: 'AAA', 'AA', or 'fail'."""
     aaa = THRESHOLDS["AAA_large" if text_size == "large" else "AAA_normal"]
     aa = THRESHOLDS["AA_large" if text_size == "large" else "AA_normal"]
     if ratio >= aaa:
@@ -269,7 +269,7 @@ def cmd_check(args) -> int:
         p = result["passes"]
         print(
             f"{args.foreground} on {args.background}: "
-            f"{result['ratio']}:1 — "
+            f"{result['ratio']}:1: "
             f"AA normal {'PASS' if p['AA_normal'] else 'FAIL'}, "
             f"AA large {'PASS' if p['AA_large'] else 'FAIL'}, "
             f"AAA normal {'PASS' if p['AAA_normal'] else 'FAIL'}, "

@@ -1,4 +1,4 @@
-// icansee — Angular template accessibility rules.
+// icansee: Angular template accessibility rules.
 // Plugins: @angular-eslint/eslint-plugin-template + the bundled accessibility
 // rules. Mapped to WCAG 2.1 A/AA.
 

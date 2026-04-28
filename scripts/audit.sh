@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# icansee — pre-commit a11y gate entrypoint.
+# icansee: pre-commit a11y gate entrypoint.
 #
 # Reads staged files (or --all / explicit paths), buckets them by file type,
 # runs the right linter for each bucket, and exits non-zero on any finding.
@@ -94,18 +94,28 @@ done
 # -- runners ---------------------------------------------------------------
 
 fail=0
+config_error=0
 section() { printf "\n\033[1m▸ %s\033[0m\n" "$1"; }
 
 run_eslint() {
+  # ESLint exit codes:
+  #   0  no issues
+  #   1  lint findings
+  #   2  config / runtime error (plugin not found, parser invalid, etc.)
+  # We surface (2) separately so users don't chase phantom "a11y findings"
+  # when the real problem is a broken config.
   local config="$1"; shift
   [ "$#" -eq 0 ] && return 0
   if [ ! -f "$config" ]; then
-    echo "icansee: missing config $config — run scripts/install.sh in this repo"
+    echo "icansee: missing config $config. Run scripts/install.sh in this repo."
+    config_error=1
     fail=1
     return 1
   fi
   npx --no-install eslint --no-warn-ignored --config "$config" "$@"
-  return $?
+  local rc=$?
+  if [ "$rc" -eq 2 ]; then config_error=1; fi
+  return $rc
 }
 
 if [ "${#jsx[@]}" -gt 0 ]; then
@@ -158,9 +168,17 @@ if [ "$fail" -eq 0 ]; then
   echo
   echo "icansee: ✓ no a11y findings on $(echo "${files[@]}" | wc -w | tr -d ' ') file(s)"
   exit 0
+elif [ "$config_error" -eq 1 ]; then
+  echo
+  echo "icansee: ✗ ESLint config error. The gate could not evaluate the staged"
+  echo "        files because a plugin or parser failed to load. This is NOT"
+  echo "        a real a11y finding. Fix the config (or re-run install.sh)"
+  echo "        before commits will go through."
+  echo "        To bypass (not recommended), use: git commit --no-verify"
+  exit 2
 else
   echo
-  echo "icansee: ✗ a11y findings detected — commit blocked."
+  echo "icansee: ✗ a11y findings detected, commit blocked."
   echo "        Fix the issues above. To bypass (not recommended), use:"
   echo "        git commit --no-verify"
   exit 1

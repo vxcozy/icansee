@@ -1,11 +1,11 @@
-# icansee — full axe-core accessibility audit on every PR.
+# icansee: full axe-core accessibility audit on every PR.
 #
 # Runs against the built+served site, so it catches what a static pre-commit
 # gate cannot: rendered-DOM contrast, landmark coverage, focus state.
 # Same engine as the Vercel toolbar's Accessibility Audit Tool.
 #
 # Routes to scan are read from .icansee/routes.json (a JSON array of paths).
-# Default is ["/"] — extend it with the routes you care about.
+# Default is ["/"]. Extend it with the routes you care about.
 
 name: Accessibility audit (axe-core)
 

@@ -1,4 +1,4 @@
-// icansee — Astro accessibility rules.
+// icansee: Astro accessibility rules.
 // Plugin: eslint-plugin-astro (which composes jsx-a11y for Astro's JSX-y
 // templates). Mapped to WCAG 2.1 A/AA.
 

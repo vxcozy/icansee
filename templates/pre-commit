@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# icansee — pre-commit accessibility gate
+# icansee: pre-commit accessibility gate
 #
 # Runs static a11y checks against staged files only. Blocks the commit on
 # any finding. Bypass with `git commit --no-verify` (you'll see it in the log).

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# icansee — pre-push rendered-DOM accessibility gate.
+# icansee: pre-push rendered-DOM accessibility gate.
 #
 # Builds the project, serves it, runs @axe-core/cli against the routes in
 # .icansee/routes.json. Same engine as the CI workflow and Vercel's
@@ -8,7 +8,7 @@
 # Bypass with `git push --no-verify` (CI will still catch it).
 #
 # Skips when no app code is being pushed (commits-only changes to
-# README, .github docs, etc.) — see filter logic below.
+# README, .github docs, etc.). See filter logic below.
 
 set -e
 
@@ -22,7 +22,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     continue  # branch deletion
   fi
   if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
-    # New branch — diff against the upstream default branch as a heuristic.
+    # New branch. Diff against the upstream default branch as a heuristic.
     base="$(git merge-base "$local_sha" HEAD@{upstream} 2>/dev/null || echo "")"
     RANGE="${base:-$local_sha~1}..$local_sha"
   else
@@ -37,10 +37,10 @@ if [ -n "$RANGE" ]; then
   CHANGED="$(git diff --name-only "$RANGE" 2>/dev/null || true)"
   if [ -n "$CHANGED" ]; then
     # Skip if every changed file is docs / config that doesn't affect the
-    # rendered DOM. Cheap heuristic — false negatives are caught by CI.
+    # rendered DOM. Cheap heuristic. False negatives are caught by CI.
     APP_CHANGES="$(echo "$CHANGED" | grep -Ev '^(README|CHANGELOG|LICENSE|\.github/|docs/|\.icansee/)' || true)"
     if [ -z "$APP_CHANGES" ]; then
-      echo "icansee: pre-push skipped — no app changes in this push"
+      echo "icansee: pre-push skipped. No app changes in this push"
       RUN=false
     fi
   fi

@@ -47,6 +47,8 @@ For when you need to look up the exact name of a flag, env var, or rule.
   fixes for the most common findings.
 - [Install and CI](reference/install-and-ci.md): what `install.sh` does,
   layer comparison table, troubleshooting.
+- [Known limitations](reference/known-limitations.md): what the gate
+  cannot catch, by layer, and where to compensate with manual auditing.
 
 ## Explanation
 

@@ -52,14 +52,16 @@ The three layers are complementary, not redundant.
 
 The pre-push hook calls `rendered_audit.sh`, which:
 
-1. Builds the project (auto-detects `npm run build`; skips if no build
+1. Pre-flights for a Chrome-class browser (Chrome or Chromium). Exits
+   with a clear error if missing.
+2. Builds the project (auto-detects `npm run build`; skips if no build
    script).
-2. Starts the app (auto-detects `npm start` or `npm run preview`, falls
+3. Starts the app (auto-detects `npm start` or `npm run preview`, falls
    back to `npx serve`).
-3. Waits for the server to come up.
-4. Runs `@axe-core/cli --tags wcag2a,wcag2aa,wcag21a,wcag21aa` against
+4. Waits for the server to come up.
+5. Runs `@axe-core/cli --tags wcag2a,wcag2aa,wcag21a,wcag21aa` against
    each route in `.icansee/routes.json`.
-5. Kills the server and exits non-zero on any finding.
+6. Kills the server and exits non-zero on any finding.
 
 Override defaults via env vars or `.icansee/env`:
 
@@ -73,6 +75,53 @@ WAIT_TIMEOUT=120000
 
 Set `BUILD_CMD=""` to skip the build entirely (useful for static-HTML
 projects).
+
+### Chrome dependency
+
+`@axe-core/cli` runs axe-core inside headless Chrome via ChromeDriver.
+That means the rendered layer needs a Chrome-class browser installed on
+the machine where it runs (your laptop for pre-push, the CI runner for
+the workflow).
+
+Install one of the following, then re-run:
+
+```bash
+# macOS (signed, passes Gatekeeper)
+brew install --cask google-chrome
+
+# Linux (Debian/Ubuntu)
+sudo apt-get install -y google-chrome-stable
+```
+
+The CI workflow's `actions/setup-node@v4` runner already includes
+Chrome; no extra step needed there.
+
+### ChromeDriver / Chrome version sync
+
+ChromeDriver and Chrome have to match major versions. When Chrome
+auto-updates, ChromeDriver lags briefly. If the rendered audit fails
+with `This version of ChromeDriver only supports Chrome version N`, sync
+them:
+
+```bash
+npx browser-driver-manager install chrome
+```
+
+Or pin to a specific major:
+
+```bash
+npx browser-driver-manager install chrome@147
+```
+
+Or pass an explicit driver path to axe:
+
+```bash
+npx @axe-core/cli <url> --chromedriver-path /path/to/chromedriver
+```
+
+`rendered_audit.sh` detects this exact failure mode and exits with code
+2 (infrastructure error, not a real a11y finding) and a one-line hint
+pointing here.
 
 ## When to opt out of pre-push
 

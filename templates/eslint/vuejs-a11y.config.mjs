@@ -1,4 +1,4 @@
-// icansee — Vue SFC accessibility rules.
+// icansee: Vue SFC accessibility rules.
 // Plugin: eslint-plugin-vuejs-accessibility. Mapped to WCAG 2.1 A/AA.
 
 import vueA11y from "eslint-plugin-vuejs-accessibility";
@@ -28,7 +28,13 @@ export default [
       "vuejs-accessibility/heading-has-content": "error",
       "vuejs-accessibility/iframe-has-title": "error",
       "vuejs-accessibility/interactive-supports-focus": "error",
-      "vuejs-accessibility/label-has-for": "error",
+      // `label-has-for` defaults to requiring BOTH nesting AND for/id,
+      // which rejects the standard `<label for>...</label><input id>`
+      // pattern. Configure to accept either approach.
+      "vuejs-accessibility/label-has-for": [
+        "error",
+        { required: { some: ["nesting", "id"] } },
+      ],
       "vuejs-accessibility/media-has-caption": "error",
       "vuejs-accessibility/mouse-events-have-key-events": "error",
       "vuejs-accessibility/no-access-key": "error",

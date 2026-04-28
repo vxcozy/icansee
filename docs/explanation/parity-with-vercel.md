@@ -88,3 +88,6 @@ The toolbar adds:
 The two are complementary tools, not competitors. Both target the same
 rule set. Use them together. The gate enforces compliance at code
 boundaries. The toolbar gives feedback during interactive design work.
+
+For the full list of what we don't check, see
+[known-limitations](../reference/known-limitations.md).

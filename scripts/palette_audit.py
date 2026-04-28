@@ -71,7 +71,7 @@ def audit_pair(fg_name: str, fg_hex: str, bg_name: str, bg_hex: str) -> dict:
     fg = parse_color(fg_hex)
     bg = parse_color(bg_hex)
     if bg.a < 1.0:
-        # Skip — undefined without knowing what's beneath.
+        # Skip. Undefined without knowing what's beneath.
         return {
             "fg": fg_name,
             "bg": bg_name,

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# icansee — install the pre-commit a11y gate (and optional CI workflow)
+# icansee: install the pre-commit a11y gate (and optional CI workflow)
 # into the current git repository.
 #
 # Detects the project's framework(s) from package.json + filesystem hints,
@@ -67,29 +67,35 @@ PY
 }
 
 has_files() {
-  # has_files <glob>
-  local glob="$1"
-  # shellcheck disable=SC2086
-  compgen -G "$glob" > /dev/null 2>&1
+  # has_files <ext1> [ext2 ...]
+  # Recursively searches the repo for files matching any of the given
+  # extensions. Uses `find` rather than bash globs because macOS ships
+  # bash 3.2 (no globstar), and `compgen -G '**/*.tsx'` does not recurse
+  # there.
+  local exts=()
+  for e in "$@"; do exts+=(-name "*.$e" -o); done
+  unset 'exts[${#exts[@]}-1]'  # drop trailing -o
+  find . -type f \( "${exts[@]}" \) -not -path '*/node_modules/*' \
+    -not -path '*/.git/*' -print -quit 2>/dev/null | grep -q .
 }
 
 if detect_dep react || detect_dep next || detect_dep preact \
-   || detect_dep solid-js || has_files '**/*.tsx' || has_files '**/*.jsx'; then
+   || detect_dep solid-js || has_files tsx jsx; then
   frameworks+=("jsx")
 fi
-if detect_dep vue || detect_dep nuxt || has_files '**/*.vue'; then
+if detect_dep vue || detect_dep nuxt || has_files vue; then
   frameworks+=("vue")
 fi
-if detect_dep svelte || detect_dep '@sveltejs/kit' || has_files '**/*.svelte'; then
+if detect_dep svelte || detect_dep '@sveltejs/kit' || has_files svelte; then
   frameworks+=("svelte")
 fi
 if detect_dep '@angular/core' || [ -f angular.json ]; then
   frameworks+=("angular")
 fi
-if detect_dep astro || has_files '**/*.astro'; then
+if detect_dep astro || has_files astro; then
   frameworks+=("astro")
 fi
-# Plain HTML support is implicit — html_audit.py runs without npm deps.
+# Plain HTML support is implicit; html_audit.py runs without npm deps.
 
 if [ "${#frameworks[@]}" -eq 0 ]; then
   frameworks+=("html-only")
@@ -191,10 +197,10 @@ if $want_ci; then
   cp "$ICANSEE_DIR/templates/github-workflow-a11y.yml" .github/workflows/a11y.yml
   if [ ! -f .icansee/routes.json ]; then
     cp "$ICANSEE_DIR/templates/routes.json" .icansee/routes.json
-    echo "icansee: created .icansee/routes.json — extend it with the routes to scan"
+    echo "icansee: created .icansee/routes.json. Extend it with the routes to scan"
   fi
   echo "icansee: CI workflow installed at .github/workflows/a11y.yml"
-  echo "        (translate to your CI provider if not on GitHub Actions —"
+  echo "        (translate to your CI provider if not on GitHub Actions;"
   echo "         see docs/reference/install-and-ci.md)"
 fi
 

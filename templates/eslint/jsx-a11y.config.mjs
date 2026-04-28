@@ -1,4 +1,4 @@
-// icansee — JSX/TSX accessibility rules (React, Next, Solid, Preact).
+// icansee: JSX/TSX accessibility rules (React, Next, Solid, Preact).
 // Plugin: eslint-plugin-jsx-a11y. Mapped to WCAG 2.1 A/AA.
 // Used at pre-commit. Pre-commit gate blocks on any error.
 
@@ -18,7 +18,7 @@ export default [
     },
     plugins: { "jsx-a11y": jsxA11y },
     rules: {
-      // Strict ruleset — every rule maps to an axe-core / WCAG A or AA SC.
+      // Strict ruleset. Every rule maps to an axe-core / WCAG A or AA SC.
       ...jsxA11y.flatConfigs.strict.rules,
       // Override: report missing alt as error, not warning, since the
       // gate blocks on any issue.
@@ -32,7 +32,12 @@ export default [
       "jsx-a11y/aria-unsupported-elements": "error",
       "jsx-a11y/autocomplete-valid": "error",
       "jsx-a11y/click-events-have-key-events": "error",
-      "jsx-a11y/control-has-associated-label": "error",
+      // `control-has-associated-label` is intentionally NOT enabled.
+      // Its default config rejects the standard `<label for>` /
+      // `<input id>` sibling pattern, which is the canonical
+      // accessible idiom for every web framework. The
+      // `label-has-associated-control` rule above already covers the
+      // accessibility goal correctly.
       "jsx-a11y/heading-has-content": "error",
       "jsx-a11y/html-has-lang": "error",
       "jsx-a11y/iframe-has-title": "error",
