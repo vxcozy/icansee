@@ -22,12 +22,22 @@ Running `scripts/install.sh` from inside a git repo:
    calls `audit.sh --staged` on every commit (~1–3s).
 5. **Wires the pre-push hook** (same husky/.git decision). Calls
    `rendered_audit.sh`, which builds the project, serves it, and runs
-   `@axe-core/cli` against every route in `.icansee/routes.json`. Skips
-   itself when only docs, `.github/`, or `.icansee/` files are in the
-   push. Around 30 to 90 seconds per push.
-6. **Copies the GitHub Actions workflow** to
+   the Playwright + `@axe-core/playwright` runner against every
+   `route × mode` combination in `.icansee/routes.json`. Skips itself
+   when only docs, `.github/`, or `.icansee/` files are in the push.
+   Around 30 to 90 seconds per push.
+6. **Installs the rendered-audit deps** (`playwright`,
+   `@axe-core/playwright`) into `.icansee/node_modules` via a small
+   `.icansee/package.json` that the installer manages. Pulls the
+   bundled Chromium into Playwright's shared cache
+   (`~/Library/Caches/ms-playwright` on macOS,
+   `~/.cache/ms-playwright` on Linux). Copies `templates/axe-runner.mjs`
+   to `.icansee/axe-runner.mjs`. Keeping these out of your project's
+   own `package.json` avoids touching your dep graph and supports
+   plain-HTML projects with no root `package.json` at all.
+7. **Copies the GitHub Actions workflow** to
    `.github/workflows/a11y.yml` and creates `.icansee/routes.json`
-   listing the routes axe-core will scan.
+   listing the routes (and color modes) axe-core will scan.
 
 Opt-out flags: `--no-hook`, `--no-pre-push`, `--no-ci`. All three layers
 are on by default since each catches a class of issue the others don't.
@@ -37,7 +47,7 @@ are on by default since each catches a class of issue the others don't.
 | Layer        | When it runs        | Speed     | What it catches                                                                                  | What it misses                                                                  |
 | ------------ | ------------------- | --------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
 | Pre-commit   | Every `git commit`  | ~1–3s     | Static source violations on staged files: missing alt, no label, bad ARIA, palette token failures. | Computed contrast through CSS cascade, focus state, anything tied to rendered DOM. |
-| Pre-push     | Every `git push`    | ~30–90s   | Everything axe-core checks against the built and served site: computed contrast, landmark coverage, focus state. Same engine as Vercel toolbar. | UI states reachable only by interaction (hover, open dialog). Vercel's "record" mode covers these manually. |
+| Pre-push     | Every `git push`    | ~30–90s   | Everything axe-core checks against the built and served site, swept across each configured color mode: computed contrast (light and dark), landmark coverage, focus state. Same engine as Vercel toolbar. | UI states reachable only by interaction (hover, open dialog). Vercel's "record" mode covers these manually. |
 | CI (axe-core)| Every PR or push    | ~1–5min   | Same as pre-push, but enforced at merge boundary where `--no-verify` cannot help.                | Same as pre-push.                                                               |
 
 The three layers are complementary, not redundant.
@@ -52,16 +62,20 @@ The three layers are complementary, not redundant.
 
 The pre-push hook calls `rendered_audit.sh`, which:
 
-1. Pre-flights for a Chrome-class browser (Chrome or Chromium). Exits
-   with a clear error if missing.
-2. Builds the project (auto-detects `npm run build`; skips if no build
+1. Builds the project (auto-detects `npm run build`; skips if no build
    script).
-3. Starts the app (auto-detects `npm start` or `npm run preview`, falls
+2. Starts the app (auto-detects `npm start` or `npm run preview`, falls
    back to `npx serve`).
-4. Waits for the server to come up.
-5. Runs `@axe-core/cli --tags wcag2a,wcag2aa,wcag21a,wcag21aa` against
-   each route in `.icansee/routes.json`.
-6. Kills the server and exits non-zero on any finding.
+3. Waits for the server to come up.
+4. Runs `.icansee/axe-runner.mjs` (Playwright + `@axe-core/playwright`)
+   for every `route × color-mode` combination in `.icansee/routes.json`,
+   with WCAG tags `wcag2a,wcag2aa,wcag21a,wcag21aa`. The runner emulates
+   `prefers-color-scheme` per scan so dark-mode contrast is exercised.
+5. Kills the server and exits non-zero on any finding.
+
+Playwright bundles its own signed Chromium, so there is no separate
+browser install and no ChromeDriver/Chrome version-mismatch class of
+failures.
 
 Override defaults via env vars or `.icansee/env`:
 
@@ -121,52 +135,25 @@ minimal scaffold.
 Default port 3000 matches `BASE_URL`. No env overrides needed for the
 stock scaffold.
 
-### Chrome dependency
+### Browser dependency
 
-`@axe-core/cli` runs axe-core inside headless Chrome via ChromeDriver.
-That means the rendered layer needs a Chrome-class browser installed on
-the machine where it runs (your laptop for pre-push, the CI runner for
-the workflow).
+The rendered layer uses Playwright's bundled Chromium. `install.sh` runs
+`npx playwright install chromium` once during install, which downloads
+the matching browser into Playwright's shared cache
+(`~/.cache/ms-playwright` on Linux/macOS) and reuses it across projects.
+There is no separate Chrome / Chromium / ChromeDriver install required.
 
-Install one of the following, then re-run:
-
-```bash
-# macOS (signed, passes Gatekeeper)
-brew install --cask google-chrome
-
-# Linux (Debian/Ubuntu)
-sudo apt-get install -y google-chrome-stable
-```
-
-The CI workflow's `actions/setup-node@v4` runner already includes
-Chrome; no extra step needed there.
-
-### ChromeDriver / Chrome version sync
-
-ChromeDriver and Chrome have to match major versions. When Chrome
-auto-updates, ChromeDriver lags briefly. If the rendered audit fails
-with `This version of ChromeDriver only supports Chrome version N`, sync
-them:
+If the cache is wiped or the runner reports `failed to launch chromium`,
+re-run:
 
 ```bash
-npx browser-driver-manager install chrome
+npx playwright install chromium
 ```
 
-Or pin to a specific major:
-
-```bash
-npx browser-driver-manager install chrome@147
-```
-
-Or pass an explicit driver path to axe:
-
-```bash
-npx @axe-core/cli <url> --chromedriver-path /path/to/chromedriver
-```
-
-`rendered_audit.sh` detects this exact failure mode and exits with code
-2 (infrastructure error, not a real a11y finding) and a one-line hint
-pointing here.
+In CI, the workflow runs `npx playwright install --with-deps chromium`
+which also installs the OS libraries the headless browser needs (fonts,
+xlib, nss, etc.). That matters on minimal Linux images that don't have
+those libs preinstalled.
 
 ## When to opt out of pre-push
 
@@ -186,52 +173,49 @@ idempotent.
 
 ## Translating the GH Actions workflow to other CI providers
 
-The workflow's job is straightforward: install deps, build, start the
-app, run `@axe-core/cli` against routes from `.icansee/routes.json`.
-The shell logic transfers directly. Map the YAML wrapper to your
-provider.
+The workflow's job is straightforward: install deps, install Playwright
+chromium, build, start the app, hand off to `.icansee/axe-runner.mjs`
+which iterates routes × color modes from `.icansee/routes.json`. The
+shell logic transfers directly. Map the YAML wrapper to your provider.
 
 ### GitLab CI (`.gitlab-ci.yml`)
 
 ```yaml
 a11y:
-  image: node:20
-  before_script:
-    - apt-get update && apt-get install -y python3
+  image: mcr.microsoft.com/playwright:v1.48.0-jammy
   script:
     - npm ci
+    - npm install --prefix .icansee --no-audit --no-fund
+    - cd .icansee && npx playwright install chromium && cd -
     - npm run build
     - SERVE_CMD="${SERVE_CMD:-npm start}"
     - $SERVE_CMD &
     - npx --yes wait-on "${BASE_URL:-http://localhost:3000}" --timeout 60000
-    - |
-      ROUTES=$(cat .icansee/routes.json | python3 -c 'import json,sys; print(" ".join(json.load(sys.stdin)))')
-      for r in $ROUTES; do
-        npx --yes @axe-core/cli "${BASE_URL:-http://localhost:3000}$r" \
-          --tags wcag2a,wcag2aa,wcag21a,wcag21aa --exit
-      done
+    - BASE_URL="${BASE_URL:-http://localhost:3000}" node .icansee/axe-runner.mjs
 ```
+
+The Playwright base image has Chromium and its OS libs preinstalled.
+On a plain `node:20` image, swap `playwright install chromium` for
+`playwright install --with-deps chromium` instead.
 
 ### CircleCI (`.circleci/config.yml`)
 
 ```yaml
 jobs:
   a11y:
-    docker: [ image: cimg/node:20.0 ]
+    docker: [ image: mcr.microsoft.com/playwright:v1.48.0-jammy ]
     steps:
       - checkout
       - run: npm ci
+      - run: npm install --prefix .icansee --no-audit --no-fund
+      - run: cd .icansee && npx playwright install chromium
       - run: npm run build
       - run:
-          name: Run axe-core
+          name: Run rendered audit
           command: |
             ${SERVE_CMD:-npm start} &
             npx --yes wait-on "${BASE_URL:-http://localhost:3000}" --timeout 60000
-            ROUTES=$(cat .icansee/routes.json | python3 -c 'import json,sys; print(" ".join(json.load(sys.stdin)))')
-            for r in $ROUTES; do
-              npx --yes @axe-core/cli "${BASE_URL:-http://localhost:3000}$r" \
-                --tags wcag2a,wcag2aa,wcag21a,wcag21aa --exit
-            done
+            BASE_URL="${BASE_URL:-http://localhost:3000}" node .icansee/axe-runner.mjs
 ```
 
 ### Vercel (Build and Deployment Checks)
@@ -245,29 +229,49 @@ applies locally.
 
 Same shape, in `bitbucket-pipelines.yml` with the same script body.
 
-## Configuring routes
+## Configuring routes and color modes
 
-`.icansee/routes.json` is a JSON array of paths to scan:
+`.icansee/routes.json` accepts two shapes.
+
+**Legacy array form** (still works, equivalent to light mode only):
 
 ```json
 ["/", "/about", "/dashboard", "/settings"]
 ```
 
-Add the routes that represent meaningful UI surface. Each one is run
-through axe-core; failures from any route block the PR.
+**v0.3+ object form** with explicit color modes:
+
+```json
+{
+  "routes": ["/", "/about", "/dashboard", "/settings"],
+  "modes": ["light", "dark"]
+}
+```
+
+The runner walks the cartesian product (every route × every mode) and
+emulates `prefers-color-scheme` per scan. Adding `dark` doubles the
+audit duration but exercises both color schemes, so a contrast bug that
+only shows up against a dark background gets caught at the same gate.
+
+If your site uses a manual `.dark` class toggle (rather than reading
+`prefers-color-scheme`), the runner can't flip it for you. Either:
+
+- Make the toggle URL-controlled (`/?theme=dark`) and add both URLs to
+  `routes`, or
+- Have your CSS read `prefers-color-scheme: dark` so emulation flips it.
+
+`modes` accepts only `"light"` and `"dark"`. Anything else exits 2.
 
 ## Authenticated routes
 
-`@axe-core/cli` does not handle login flows on its own. Two options:
+The bundled runner does not handle login flows. Two options:
 
 1. **Test the unauthenticated shell only**: the marketing surface,
    sign-in and sign-up pages. Often enough for the rules that are most
    commonly broken (contrast, labels, headings).
-2. **Switch to a Playwright + axe runner** for authenticated routes.
-   Skip `@axe-core/cli` and run `@axe-core/playwright` from a
-   Playwright spec that signs in first. The skill ships
-   `@axe-core/cli` as the default because it's the closest analog to
-   Vercel's toolbar; switch when you outgrow it.
+2. **Replace the runner with your own Playwright spec** that signs in
+   first, then runs `@axe-core/playwright`. The bundled runner is a
+   minimal starting point you can fork into `.icansee/axe-runner.mjs`.
 
 ## Slow builds
 

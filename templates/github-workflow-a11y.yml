@@ -1,11 +1,23 @@
-# icansee: full axe-core accessibility audit on every PR.
+# icansee: full Playwright + axe-core accessibility audit on every PR.
 #
 # Runs against the built+served site, so it catches what a static pre-commit
-# gate cannot: rendered-DOM contrast, landmark coverage, focus state.
+# gate cannot: rendered-DOM contrast, landmark coverage, focus state,
+# and (in v0.3+) dark-mode contrast via prefers-color-scheme emulation.
 # Same engine as the Vercel toolbar's Accessibility Audit Tool.
 #
-# Routes to scan are read from .icansee/routes.json (a JSON array of paths).
-# Default is ["/"]. Extend it with the routes you care about.
+# Routes (and color modes) are read from .icansee/routes.json. Legacy
+# array form scans "/" in light mode only. New object form lets you
+# opt into dark-mode scanning:
+#
+#   {"routes": ["/", "/dashboard"], "modes": ["light", "dark"]}
+#
+# Playwright bundles its own Chromium (cached across runs), so there is
+# no ChromeDriver version-mismatch class of failures here. Runner deps
+# live in .icansee/node_modules, kept separate from the user's own deps.
+#
+# This workflow assumes the project has package.json with `build` and
+# `start` (or `preview`) scripts. For plain-HTML projects, customize the
+# Build / Start steps below or set ICANSEE_SERVE_CMD as a repo variable.
 
 name: Accessibility audit (axe-core)
 
@@ -26,38 +38,34 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install
+      - name: Install project deps
         run: npm ci
+
+      - name: Install icansee runner deps
+        # .icansee/package.json pins playwright + @axe-core/playwright.
+        run: npm install --prefix .icansee --no-audit --no-fund
+
+      - name: Cache Playwright browsers
+        # Chromium binary lives in ~/.cache/ms-playwright on Linux.
+        # Keyed on .icansee/package.json so a runner-version bump invalidates.
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('.icansee/package.json') }}
+
+      - name: Install Playwright OS deps
+        # Installs system libraries (fonts, libnss3, etc.) the headless
+        # browser needs. Fast even on cache-miss; safe to always run.
+        run: cd .icansee && npx playwright install-deps chromium
+
+      - name: Install Playwright chromium binary
+        # Skipped on cache hit (saves ~150MB download).
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: cd .icansee && npx playwright install chromium
 
       - name: Build
         run: npm run build
-
-      - name: Sync ChromeDriver to runner's Chrome
-        # GitHub runners ship a recent Chrome, but @axe-core/cli's bundled
-        # chromedriver is sometimes a version ahead. browser-driver-manager
-        # downloads a chromedriver matching the installed Chrome and prints
-        # the path. We export that path so the axe step can pin to it via
-        # --chromedriver-path.
-        id: drivers
-        run: |
-          OUTPUT=$(npx --yes browser-driver-manager install chrome)
-          echo "$OUTPUT"
-          DRIVER=$(echo "$OUTPUT" | grep -o 'CHROMEDRIVER_TEST_PATH="[^"]*"' | sed 's/.*="\(.*\)"/\1/')
-          if [ -z "$DRIVER" ]; then
-            echo "::error::browser-driver-manager did not emit CHROMEDRIVER_TEST_PATH"
-            exit 1
-          fi
-          echo "path=$DRIVER" >> "$GITHUB_OUTPUT"
-
-      - name: Determine routes
-        id: routes
-        run: |
-          if [ -f .icansee/routes.json ]; then
-            ROUTES=$(cat .icansee/routes.json | python3 -c 'import json,sys; print(" ".join(json.load(sys.stdin)))')
-          else
-            ROUTES="/"
-          fi
-          echo "list=$ROUTES" >> "$GITHUB_OUTPUT"
 
       - name: Start app and run axe-core
         run: |
@@ -70,19 +78,11 @@ jobs:
           BASE_URL="${BASE_URL:-http://localhost:3000}"
           npx --yes wait-on "$BASE_URL" --timeout 60000
 
-          FAIL=0
-          for route in ${{ steps.routes.outputs.list }}; do
-            URL="${BASE_URL}${route}"
-            echo "::group::axe $URL"
-            npx --yes @axe-core/cli "$URL" \
-              --tags wcag2a,wcag2aa,wcag21a,wcag21aa \
-              --chromedriver-path "${{ steps.drivers.outputs.path }}" \
-              --exit || FAIL=1
-            echo "::endgroup::"
-          done
+          BASE_URL="$BASE_URL" node .icansee/axe-runner.mjs
+          STATUS=$?
 
           kill $APP_PID || true
-          exit $FAIL
+          exit $STATUS
         env:
           # Set in repo settings if you need a custom port or start command.
           BASE_URL: ${{ vars.ICANSEE_BASE_URL }}
