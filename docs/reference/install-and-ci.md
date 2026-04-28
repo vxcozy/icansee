@@ -76,6 +76,51 @@ WAIT_TIMEOUT=120000
 Set `BUILD_CMD=""` to skip the build entirely (useful for static-HTML
 projects).
 
+### Framework-specific gotchas
+
+Verified against real upstream scaffolds. If you're on one of these
+frameworks, expect the following on first install.
+
+**Vite (Vue / React / Solid).** `npm run preview` exists but defaults
+to a randomly-allocated port unless you pass `--port`. Auto-detection
+will pick `npm run preview` but `BASE_URL` defaults to
+`http://localhost:3000`, which won't match. Set both explicitly in
+`.icansee/env`:
+
+```bash
+SERVE_CMD="npm run preview -- --port 4173"
+BASE_URL="http://localhost:4173"
+```
+
+**SvelteKit.** The `npx sv create` minimal template ships with an
+`app.html` that does NOT include a `<title>` element. axe-core
+correctly reports `document-title` violations on the homepage out of
+the box. Add a `<title>` to `src/app.html` (or via `<svelte:head>` in
+your root layout) before expecting clean runs. Same `--port` gotcha
+applies for `npm run preview`.
+
+**Angular.** `ng build` outputs to
+`dist/<project-name>/browser/index.html`. Use `npx serve -s` against
+that path:
+
+```bash
+SERVE_CMD="npx --yes serve -s dist/<project-name>/browser -l 4175"
+BASE_URL="http://localhost:4175"
+```
+
+The Angular CLI default landing page (the "what's next" pills)
+contains real `color-contrast` violations on the stock scaffold. Your
+first CI run will fail. The fix is to clear out the stock landing
+page, not to ignore the rule.
+
+**Astro.** `npm run preview` defaults to port 4321. Same `--port`
+flag-forwarding pattern as Vite. No template-level violations on the
+minimal scaffold.
+
+**Next.js.** Auto-detection picks `npm start` after `npm run build`.
+Default port 3000 matches `BASE_URL`. No env overrides needed for the
+stock scaffold.
+
 ### Chrome dependency
 
 `@axe-core/cli` runs axe-core inside headless Chrome via ChromeDriver.
