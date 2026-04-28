@@ -45,6 +45,24 @@ Each plugin has its own blind spots:
   reachable through a specific runtime branch may be missed depending
   on how the JSX is shaped.
 
+### Standalone unlabeled inputs (jsx-a11y, Vue, Astro)
+
+The static layer does not catch a standalone `<input>` that has no
+`<label>` anywhere near it. The `jsx-a11y/label-has-associated-control`
+rule (and its Vue and Astro equivalents) fires when a `<label>` exists
+but is missing its association to a control. It does not fire on an
+`<input>` that is genuinely on its own with no label nearby.
+
+This is intentional in the upstream rule: a label and its input can be
+in completely different components and still associate at runtime, so
+flagging "every input must have a label" would have a high false
+positive rate. icansee inherits that decision.
+
+The pre-push and CI layers (axe-core in the rendered DOM) catch the
+same case correctly because by the time the DOM is rendered, either
+the label is there or it isn't. So the gate as a whole still blocks
+unlabeled inputs at push time. They just sail through pre-commit.
+
 ### Design tokens
 
 `palette_audit.py` only audits the explicit foreground/background pairs

@@ -32,6 +32,23 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Sync ChromeDriver to runner's Chrome
+        # GitHub runners ship a recent Chrome, but @axe-core/cli's bundled
+        # chromedriver is sometimes a version ahead. browser-driver-manager
+        # downloads a chromedriver matching the installed Chrome and prints
+        # the path. We export that path so the axe step can pin to it via
+        # --chromedriver-path.
+        id: drivers
+        run: |
+          OUTPUT=$(npx --yes browser-driver-manager install chrome)
+          echo "$OUTPUT"
+          DRIVER=$(echo "$OUTPUT" | grep -o 'CHROMEDRIVER_TEST_PATH="[^"]*"' | sed 's/.*="\(.*\)"/\1/')
+          if [ -z "$DRIVER" ]; then
+            echo "::error::browser-driver-manager did not emit CHROMEDRIVER_TEST_PATH"
+            exit 1
+          fi
+          echo "path=$DRIVER" >> "$GITHUB_OUTPUT"
+
       - name: Determine routes
         id: routes
         run: |
@@ -59,6 +76,7 @@ jobs:
             echo "::group::axe $URL"
             npx --yes @axe-core/cli "$URL" \
               --tags wcag2a,wcag2aa,wcag21a,wcag21aa \
+              --chromedriver-path "${{ steps.drivers.outputs.path }}" \
               --exit || FAIL=1
             echo "::endgroup::"
           done
