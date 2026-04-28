@@ -13,7 +13,7 @@ can't:
 | Layer       | Trigger        | Catches                                                                | Speed     |
 | ----------- | -------------- | ---------------------------------------------------------------------- | --------- |
 | Pre-commit  | `git commit`   | Source-level violations: missing alt, no label, bad ARIA, palette failures. | ~1–3s     |
-| Pre-push    | `git push`     | Rendered-DOM rules via `@axe-core/cli` against the built site.         | ~30–90s   |
+| Pre-push    | `git push`     | Rendered-DOM rules via Playwright + axe-core against the built site, sweeping configured color modes. | ~30–90s   |
 | CI          | PR / push      | Same as pre-push, enforced server-side. `--no-verify` cannot bypass.   | ~1–5min   |
 
 Static checks support React, Next.js, Solid, Preact, Vue, Nuxt, Svelte,
@@ -122,8 +122,9 @@ The rule set comes from axe-core. The shape of the gate is icansee's.
 - Claude Code as a SKILL.md skill.
 - skills.sh marketplace format.
 - macOS and Linux for the installer scripts (`bash` + `python3` 3.8+).
-- Node 18+ in the project being gated, for the ESLint and `@axe-core/cli`
-  layers.
+- Node 18+ in the project being gated, for the ESLint and Playwright +
+  axe-core layers. Playwright bundles its own Chromium; no separate
+  browser install required.
 
 ## License
 

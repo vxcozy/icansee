@@ -1,8 +1,8 @@
 # How to audit authenticated routes
 
-`@axe-core/cli` can't log in for you. If your app's interesting surface is
-behind authentication, the default flow won't reach it. Three ways out,
-ordered by effort.
+The bundled `.icansee/axe-runner.mjs` does not log in for you. If your
+app's interesting surface is behind authentication, the default flow
+won't reach it. Three ways out, ordered by effort.
 
 ## Option 1: audit the unauthenticated shell only
 
@@ -29,11 +29,12 @@ them on the bypass session.
 This is the cleanest fit if you already have a test-mode auth path for
 e2e tests, since you're piggybacking on existing infrastructure.
 
-## Option 3: switch to Playwright + @axe-core/playwright
+## Option 3: fork the runner into a Playwright spec with login
 
-When you outgrow `@axe-core/cli`, replace the CI workflow's run with a
-Playwright spec that signs in first, then runs axe against each protected
-route.
+The bundled runner already uses Playwright + `@axe-core/playwright`.
+For protected routes, fork `.icansee/axe-runner.mjs` (or run a
+Playwright spec alongside it) that signs in first, then runs axe
+against each protected route.
 
 ```javascript
 // e2e/a11y.spec.ts
@@ -61,20 +62,21 @@ for (const route of ROUTES) {
 }
 ```
 
-Then in CI, run `npx playwright test e2e/a11y.spec.ts` instead of (or
-alongside) `@axe-core/cli`.
+Then in CI, run `npx playwright test e2e/a11y.spec.ts` alongside (or
+instead of) `node .icansee/axe-runner.mjs`.
 
-You can keep `@axe-core/cli` for the unauthenticated routes and use
-Playwright for the protected ones. The skill's CI workflow won't drive the
-Playwright run. Wire it as a separate workflow step or job.
+You can keep the bundled runner for the unauthenticated routes and use
+your custom Playwright spec for the protected ones. The skill's CI
+workflow won't drive the custom spec; wire it as a separate workflow
+step or job.
 
 ## Trade-offs
 
-| Option              | Effort    | Coverage of auth'd routes | Maintenance                    |
-| ------------------- | --------- | ------------------------- | ------------------------------ |
-| Unauthenticated only | None      | None                      | None                           |
-| Auth bypass         | Medium    | Full                      | Keep bypass alive in test env  |
-| Playwright + axe    | Higher    | Full                      | Spec to maintain per route     |
+| Option                 | Effort    | Coverage of auth'd routes | Maintenance                    |
+| ---------------------- | --------- | ------------------------- | ------------------------------ |
+| Unauthenticated only   | None      | None                      | None                           |
+| Auth bypass            | Medium    | Full                      | Keep bypass alive in test env  |
+| Custom Playwright spec | Higher    | Full                      | Spec to maintain per route     |
 
 Most teams start with Option 1, add Option 2 once they have e2e tests with
 auth bypass, and reach for Option 3 only if they're already using

@@ -49,11 +49,6 @@ run_case() {
   fi
 }
 
-skip_case() {
-  local desc="$1" reason="$2"
-  printf '  SKIP  %s: %s\n' "$desc" "$reason"
-}
-
 echo "install.sh detection cases:"
 
 run_case "empty repo" "html-only" ":"

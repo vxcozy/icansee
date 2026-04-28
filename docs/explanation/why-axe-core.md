@@ -56,7 +56,7 @@ not because we made them up.
 
 ## The static layer's relationship to axe-core
 
-`@axe-core/cli` runs against a rendered DOM, so it can't fire at
+The rendered axe-core run requires a built DOM, so it can't fire at
 pre-commit. The static layer (`html_audit.py`, `eslint-plugin-jsx-a11y`,
 the framework-specific ESLint plugins) checks the *same* rules where
 they're statically detectable.

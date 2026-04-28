@@ -164,6 +164,75 @@ if [ "${#plugin_pkgs[@]}" -gt 0 ]; then
   }
 fi
 
+# -- rendered-DOM audit deps (Playwright + axe) ----------------------------
+#
+# The pre-push and CI layers run .icansee/axe-runner.mjs, which imports
+# `playwright` and `@axe-core/playwright`. To keep the gate self-contained
+# (and to support plain-HTML projects with no package.json), we install
+# the runner's deps INTO .icansee/, not the user's project root. Node's
+# module resolver finds .icansee/node_modules naturally because the
+# runner lives in the same directory. Playwright bundles a signed
+# Chromium into ~/.cache/ms-playwright (shared across projects), so the
+# per-project disk cost here is just ~5MB of JS.
+
+if $want_pre_push || $want_ci; then
+  cp "$ICANSEE_DIR/templates/axe-runner.mjs" .icansee/axe-runner.mjs
+  cp "$ICANSEE_DIR/templates/parse-routes.mjs" .icansee/parse-routes.mjs
+  chmod +x .icansee/axe-runner.mjs
+
+  # Exact pins so every install.sh run resolves to the same versions
+  # regardless of when it runs. Bump these in lockstep with icansee
+  # releases and re-verify the smoke test before tagging.
+  cat > .icansee/package.json <<'JSON'
+{
+  "name": "icansee-runner",
+  "private": true,
+  "type": "module",
+  "description": "Self-contained deps for .icansee/axe-runner.mjs. Managed by icansee install.sh; do not hand-edit.",
+  "dependencies": {
+    "playwright": "1.59.1",
+    "@axe-core/playwright": "4.11.2"
+  }
+}
+JSON
+
+  if ! command -v npm >/dev/null 2>&1; then
+    echo "icansee: ✗ npm is not on PATH. The rendered audit needs npm to install" >&2
+    echo "        playwright + @axe-core/playwright into .icansee/. Install Node," >&2
+    echo "        then re-run this script." >&2
+    exit 1
+  fi
+
+  # Capture install output so the user sees exactly why a failure happened
+  # instead of a vague "rendered audit will fail" line.
+  log="$(mktemp -t icansee-install.XXXXXX)"
+  trap 'rm -f "$log"' EXIT
+
+  echo "icansee: installing rendered-audit deps into .icansee/ (playwright, @axe-core/playwright)"
+  if ! npm install --prefix .icansee --no-audit --no-fund >"$log" 2>&1; then
+    echo "icansee: ✗ 'npm install --prefix .icansee' failed. Output below:" >&2
+    echo "------------------------------------------------------------" >&2
+    cat "$log" >&2
+    echo "------------------------------------------------------------" >&2
+    echo "icansee: rendered audit cannot run until this is resolved." >&2
+    exit 1
+  fi
+
+  # Pull the chromium binary into Playwright's shared cache. Idempotent
+  # and fast on subsequent runs.
+  echo "icansee: ensuring Playwright chromium is installed"
+  if ! (cd .icansee && npx --yes playwright install chromium >"$log" 2>&1); then
+    echo "icansee: ✗ 'npx playwright install chromium' failed. Output below:" >&2
+    echo "------------------------------------------------------------" >&2
+    cat "$log" >&2
+    echo "------------------------------------------------------------" >&2
+    echo "icansee: rendered audit cannot run until this is resolved." >&2
+    exit 1
+  fi
+
+  echo "icansee: rendered-audit runner installed at .icansee/axe-runner.mjs"
+fi
+
 # -- git hooks (pre-commit + pre-push) -------------------------------------
 
 install_hook() {
@@ -208,11 +277,14 @@ cat <<EOF
 
 icansee install complete.
   Pre-commit:  blocks commits with any static a11y issue (~1–3s).
-  Pre-push:    runs full @axe-core/cli against built+served site (~30–90s).
+  Pre-push:    runs Playwright + axe-core against the built+served site,
+               sweeping configured color modes (~30–90s).
   CI workflow: same rendered-DOM check, enforced at PR boundary.
 
 Customize:
-  .icansee/routes.json   routes the rendered audit will scan
+  .icansee/routes.json   routes (and color modes) the rendered audit scans.
+                         Legacy: ["/", "/dashboard"]
+                         v0.3+:  {"routes": ["/"], "modes": ["light", "dark"]}
   .icansee/env           set BUILD_CMD / SERVE_CMD / BASE_URL overrides
 
 Try it:

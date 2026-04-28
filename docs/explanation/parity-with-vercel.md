@@ -6,11 +6,13 @@ and where it doesn't hold at all.
 
 ## The exact part
 
-The pre-push and CI layers run `@axe-core/cli` with the WCAG 2.0/2.1
-A and AA tags:
+The pre-push and CI layers run Playwright + `@axe-core/playwright` with
+the WCAG 2.0/2.1 A and AA tags:
 
-```
---tags wcag2a,wcag2aa,wcag21a,wcag21aa
+```js
+new AxeBuilder({ page })
+  .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+  .analyze();
 ```
 
 Vercel's documentation confirms its toolbar uses the same axe-core engine
@@ -46,17 +48,18 @@ the gate's coverage drifts behind the toolbar's.
 ## Where parity doesn't hold
 
 Single-page-app navigation behaves differently. The toolbar runs in your
-live SPA and re-checks as you navigate client-side. `@axe-core/cli`
-issues a fresh page load for each URL in `routes.json`. If your SPA only
-has fully-functional content after client hydration that depends on
-persisted state, the toolbar may see something the CLI doesn't.
-Workaround: ensure each route loads cleanly from a cold visit.
+live SPA and re-checks as you navigate client-side. The bundled runner
+issues a fresh page load for each URL × color-mode in `routes.json`. If
+your SPA only has fully-functional content after client hydration that
+depends on persisted state, the toolbar may see something the runner
+doesn't. Workaround: ensure each route loads cleanly from a cold visit.
 
-Browser-specific issues are also out of scope. `@axe-core/cli` runs in a
-single Puppeteer-controlled Chromium. The toolbar runs in whatever
-browser the user has open. Browser-specific bugs like focus-state quirks
-in Safari are outside axe-core's scope by design, and neither tool
-catches them reliably.
+Browser-specific issues are also out of scope. The runner uses
+Playwright's bundled Chromium. The toolbar runs in whatever browser the
+user has open. Browser-specific bugs like focus-state quirks in Safari
+are outside axe-core's scope by design, and neither tool catches them
+reliably. (Playwright also bundles WebKit and Firefox; extending the
+runner to sweep them is a fork-friendly change.)
 
 axe-core's experimental and best-practice rules are also handled
 differently. The skill enables only A/AA rule tags. axe-core has
@@ -65,10 +68,9 @@ per se but are useful (`heading-order`, `landmark-one-main`). Vercel's
 toolbar may surface these by default; our gate doesn't, because we want
 every blocked commit to map to an actual WCAG success criterion.
 
-You can broaden the tag list if you want. Edit
-`templates/github-workflow-a11y.yml` and the call inside
-`scripts/rendered_audit.sh` to add `best-practice` or other tags. But
-once you do, you've left strict WCAG A/AA territory.
+You can broaden the tag list if you want. Edit `.icansee/axe-runner.mjs`
+and update the `withTags([...])` call to add `best-practice` or other
+tags. But once you do, you've left strict WCAG A/AA territory.
 
 ## The honest summary
 

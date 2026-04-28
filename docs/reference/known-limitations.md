@@ -78,8 +78,9 @@ The fix is to keep `palette.json` in sync with the design system. See
 
 ### Default page load only
 
-The pre-push hook and the CI workflow both run `@axe-core/cli` against
-the route's initial render. They do not exercise:
+The pre-push hook and the CI workflow both run Playwright +
+`@axe-core/playwright` against the route's initial render (per
+configured color mode). They do not exercise:
 
 - Hover states.
 - Keyboard focus states beyond what's present at load.
@@ -90,8 +91,9 @@ the route's initial render. They do not exercise:
 
 Vercel's toolbar has a "record interactions" mode that re-runs axe-core
 after each interaction in a recorded session. The icansee gate has no
-equivalent. To cover interactive states, use `@axe-core/playwright`
-inside a Playwright test that drives the interactions explicitly.
+equivalent. To cover interactive states, fork
+`.icansee/axe-runner.mjs` into a Playwright spec that drives the
+interactions explicitly before calling `AxeBuilder`.
 
 ### SPA navigation and hydration
 
@@ -102,37 +104,37 @@ hydration sequence may all behave differently from what the cold load
 shows. If your app's a11y characteristics depend on the navigation
 path, the gate will not catch issues that only appear mid-flow.
 
+### Manual `.dark` toggles
+
+Color-mode emulation only flips `prefers-color-scheme`. If your site
+uses a manual `.dark` class toggle (driven by JS, a cookie, or
+localStorage) that does not consult `prefers-color-scheme`, the runner
+won't see your dark theme even with `"modes": ["light", "dark"]`. Two
+workarounds:
+
+- Make the toggle URL-controlled (`/?theme=dark`) and list both URLs in
+  `routes`. Each URL gets a full audit at the configured modes.
+- Have the CSS read `prefers-color-scheme: dark` (e.g. via a
+  `data-theme="auto"` default). Emulation will then take effect.
+
 ### Authentication walls
 
-`@axe-core/cli` cannot sign in. Routes behind authentication are out of
-reach unless one of these is true:
+The bundled runner does not sign in. Routes behind authentication are
+out of reach unless one of these is true:
 
 - The app supports a test-mode bypass that lets the headless browser
   hit the route without credentials.
-- You replace `@axe-core/cli` with `@axe-core/playwright` and run it
-  from a Playwright spec that signs in first. See
+- You fork `.icansee/axe-runner.mjs` into a Playwright spec that signs
+  in first. See
   [How to audit authenticated routes](../how-to/authenticated-routes.md).
 
 ### Browser-specific issues
 
-`@axe-core/cli` runs in a single Puppeteer-controlled Chromium build.
-Issues that only appear in Safari, Firefox, or specific browser
-versions (Safari focus-ring quirks, for instance) are outside
-axe-core's scope and outside what the gate can detect.
-
-### Chrome / ChromeDriver dependency
-
-The rendered layer needs a Chrome-class browser installed on the
-machine where it runs. ChromeDriver and Chrome must match major
-versions. When Chrome auto-updates, the driver lags briefly and
-`rendered_audit.sh` will exit with code 2 (infrastructure error, not
-a real a11y finding) until you re-sync with `npx
-browser-driver-manager install chrome`. See
-[install-and-ci.md → Chrome dependency](install-and-ci.md#chrome-dependency)
-for the full setup. This is a real ergonomic burden for the rendered
-layer; if it bites your team often, consider switching to
-`@axe-core/playwright` (which bundles its own browser) per the
-[authenticated routes guide](../how-to/authenticated-routes.md).
+The runner uses Playwright's bundled Chromium. Issues that only appear
+in Safari, Firefox, or specific browser versions (Safari focus-ring
+quirks, for instance) are outside axe-core's scope and outside what the
+gate can detect. (Playwright supports WebKit and Firefox engines too;
+extending the runner to sweep them is a fork-friendly change.)
 
 ## Things axe-core itself can't check
 

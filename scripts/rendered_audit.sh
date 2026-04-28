@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # icansee: rendered-DOM accessibility audit.
 #
-# Builds the project (if a build script exists), starts the app, runs
-# @axe-core/cli against every route in .icansee/routes.json, then shuts the
-# server down. Exits non-zero on any axe finding.
+# Builds the project (if a build script exists), starts the app, runs the
+# Playwright + @axe-core/playwright runner against every route in
+# .icansee/routes.json across every configured color mode (light / dark),
+# then shuts the server down. Exits non-zero on any axe finding.
 #
 # This is the layer that catches what static source can't: computed contrast
 # through the CSS cascade, landmark coverage of the rendered tree, focus
-# state on default page load. Same engine as the CI workflow and Vercel's
-# Accessibility Audit Tool.
+# state on default page load, and (in v0.3+) dark-mode contrast via
+# `prefers-color-scheme` emulation.
 #
 # Used by the pre-push hook. Also runnable directly:
 #   scripts/rendered_audit.sh
@@ -67,19 +68,23 @@ fi
 BASE_URL="${BASE_URL:-http://localhost:3000}"
 WAIT_TIMEOUT="${WAIT_TIMEOUT:-60000}"
 
-# -- routes -----------------------------------------------------------------
+# -- pre-flight: check the runner is installed ------------------------------
 
-routes_file=".icansee/routes.json"
-if [ ! -f "$routes_file" ]; then
-  echo "icansee: $routes_file missing. Defaulting to [\"/\"]"
-  routes='/'
-else
-  routes="$(python3 -c 'import json,sys; print(" ".join(json.load(open(sys.argv[1]))))' "$routes_file")"
+RUNNER=".icansee/axe-runner.mjs"
+if [ ! -f "$RUNNER" ]; then
+  cat <<EOF >&2
+
+icansee: missing $RUNNER. Re-run the installer:
+
+          bash $ICANSEE_DIR/scripts/install.sh
+
+EOF
+  exit 2
 fi
 
-# -- build ------------------------------------------------------------------
-
 section() { printf "\n\033[1m▸ %s\033[0m\n" "$1"; }
+
+# -- build ------------------------------------------------------------------
 
 if [ -n "$BUILD_CMD" ]; then
   section "Build: $BUILD_CMD"
@@ -93,45 +98,7 @@ fi
 
 # -- start app --------------------------------------------------------------
 
-# -- pre-flight: check for a Chrome-class browser ---------------------------
-
-# @axe-core/cli launches Chrome via chromedriver. If neither is reachable,
-# the user gets a thousand-line Selenium stack trace. Pre-flight so we can
-# print one helpful sentence instead.
-
-CHROME_PATHS=(
-  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-  "/Applications/Chromium.app/Contents/MacOS/Chromium"
-  "$(command -v google-chrome 2>/dev/null)"
-  "$(command -v chromium 2>/dev/null)"
-)
-have_chrome=false
-for p in "${CHROME_PATHS[@]}"; do
-  [ -n "$p" ] && [ -x "$p" ] && have_chrome=true && break
-done
-
-if ! $have_chrome; then
-  cat <<'EOF' >&2
-
-icansee: rendered audit needs a Chrome-class browser (Chrome, Chromium).
-        None found at the standard paths. Install one of:
-
-          # macOS (recommended)
-          brew install --cask google-chrome
-
-          # Linux (Debian/Ubuntu)
-          sudo apt-get install -y google-chrome-stable
-          # or
-          sudo apt-get install -y chromium-browser
-
-        Then re-run the push (or this script directly).
-EOF
-  exit 2
-fi
-
 section "Serve: $SERVE_CMD"
-# Run the server in its own process group so we can kill the whole tree.
-# `setsid` isn't on macOS by default; fall back to plain background.
 ( $SERVE_CMD ) >/tmp/icansee-serve.log 2>&1 &
 APP_PID=$!
 
@@ -153,54 +120,16 @@ if ! npx --yes wait-on "$BASE_URL" --timeout "$WAIT_TIMEOUT"; then
   exit 1
 fi
 
-# -- run axe per route ------------------------------------------------------
+# -- run the audit ----------------------------------------------------------
 
-fail=0
-infra_error=0
-AXE_LOG="$(mktemp -t icansee-axe.XXXXXX)"
+BASE_URL="$BASE_URL" node "$RUNNER"
+status=$?
 
-for route in $routes; do
-  url="${BASE_URL}${route}"
-  section "axe-core: $url"
-  # Capture combined output so we can detect ChromeDriver / version errors
-  # that don't represent real a11y findings.
-  if npx --yes @axe-core/cli "$url" \
-        --tags wcag2a,wcag2aa,wcag21a,wcag21aa \
-        --exit 2>&1 | tee -a "$AXE_LOG"; then
-    :
-  else
-    fail=1
-    if grep -qE "session not created|chromedriver|cannot find Chrome binary|Chrome instance exited|This version of ChromeDriver only supports Chrome version" "$AXE_LOG"; then
-      infra_error=1
-    fi
-  fi
-done
-
-# -- summary ----------------------------------------------------------------
-
-if [ "$fail" -eq 0 ]; then
-  echo
-  echo "icansee: ✓ rendered-DOM audit clean across all routes"
-  rm -f "$AXE_LOG"
+if [ "$status" -eq 0 ]; then
   exit 0
-elif [ "$infra_error" -eq 1 ]; then
-  echo
-  echo "icansee: ✗ ChromeDriver / Chrome version mismatch or missing binary."
-  echo "        This is NOT a real a11y finding. Sync the versions with:"
-  echo
-  echo "          npx browser-driver-manager install chrome"
-  echo
-  echo "        Or pass an explicit chromedriver path:"
-  echo "          npx @axe-core/cli <url> --chromedriver-path /path/to/chromedriver"
-  echo
-  echo "        See docs/reference/install-and-ci.md for details."
-  rm -f "$AXE_LOG"
-  exit 2
-else
-  echo
-  echo "icansee: ✗ rendered-DOM audit found issues, push blocked."
-  echo "        Fix the issues above. To bypass (not recommended):"
-  echo "        git push --no-verify"
-  rm -f "$AXE_LOG"
+elif [ "$status" -eq 1 ]; then
   exit 1
+else
+  echo "icansee: ✗ rendered audit hit an infra error (see above)" >&2
+  exit 2
 fi

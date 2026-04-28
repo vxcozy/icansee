@@ -1,6 +1,6 @@
 ---
 name: icansee
-description: Install and operate a three-layer WCAG 2.1 A/AA accessibility gate that blocks commits and pushes with a11y issues. Same axe-core rule set as Vercel's Accessibility Audit Tool. Layers are (1) a pre-commit hook running static checks (jsx-a11y, vuejs-accessibility, svelte, angular-template, astro, plain HTML, palette tokens) on staged files, (2) a pre-push hook running @axe-core/cli against the built and served site to catch rendered-DOM rules (computed contrast, landmark coverage, focus state), and (3) a GitHub Actions workflow enforcing the same rendered audit at the PR boundary. Also handles on-demand reviews like contrast ratio checks, palette audits, and snippet reviews. Use when the user asks to set up a11y CI, block accessibility issues at commit, audit a palette, check a contrast ratio, or review code for WCAG compliance.
+description: Install and operate a three-layer WCAG 2.1 A/AA accessibility gate that blocks commits and pushes with a11y issues. Same axe-core rule set as Vercel's Accessibility Audit Tool. Layers are (1) a pre-commit hook running static checks (jsx-a11y, vuejs-accessibility, svelte, angular-template, astro, plain HTML, palette tokens) on staged files, (2) a pre-push hook running Playwright + @axe-core/playwright against the built and served site to catch rendered-DOM rules (computed contrast, landmark coverage, focus state) and to sweep light/dark color modes via prefers-color-scheme emulation, and (3) a GitHub Actions workflow enforcing the same rendered audit at the PR boundary. Also handles on-demand reviews like contrast ratio checks, palette audits, and snippet reviews. Use when the user asks to set up a11y CI, block accessibility issues at commit, audit a palette, check a contrast ratio, or review code for WCAG compliance.
 ---
 
 # icansee: accessibility gate and reviewer
@@ -31,7 +31,7 @@ Three layers, complementary:
 | Layer        | Trigger        | Engine                                                              | Catches                                                                                  | Speed     |
 | ------------ | -------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | --------- |
 | Pre-commit   | `git commit`   | `audit.sh` → eslint plugins + `html_audit.py` + `palette_audit.py`  | Source-level rule violations on staged files: missing alt, no label, bad ARIA, palette failures. | ~1–3s    |
-| Pre-push     | `git push`     | `rendered_audit.sh` → `@axe-core/cli` against built+served site     | Rendered-DOM rules that source can't see: computed contrast through CSS cascade, landmark coverage, focus state. | ~30–90s  |
+| Pre-push     | `git push`     | `rendered_audit.sh` → Playwright + `@axe-core/playwright` against built+served site, sweeping configured color modes | Rendered-DOM rules that source can't see: computed contrast through CSS cascade, landmark coverage, focus state, dark-mode contrast via `prefers-color-scheme` emulation. | ~30–90s  |
 | CI           | PR / push      | Same as pre-push, in GitHub Actions (`.github/workflows/a11y.yml`)  | Same as pre-push, but enforced at the merge boundary where `--no-verify` cannot help.    | ~1–5min  |
 
 Why three layers, not two:
@@ -59,7 +59,7 @@ pre-push, no bypass for CI.
 | Lint staged files manually                    | `scripts/audit.sh --staged`                                          |
 | Lint everything in the repo                   | `scripts/audit.sh --all`                                             |
 | Lint specific files                           | `scripts/audit.sh path/to/file.tsx`                                  |
-| Run rendered-DOM audit locally                | `scripts/rendered_audit.sh` (builds, serves, runs @axe-core/cli)     |
+| Run rendered-DOM audit locally                | `scripts/rendered_audit.sh` (builds, serves, runs Playwright + axe per route × mode) |
 | Check one contrast pair                       | `scripts/contrast.py check <fg> <bg>`                                |
 | Suggest a passing color                       | `scripts/contrast.py suggest <fg> <bg> --target 4.5`                 |
 | Audit a palette / token file                  | `scripts/palette_audit.py matrix tokens.json`                        |
@@ -83,8 +83,10 @@ When the user asks to set this up in their project:
    into `.icansee/`, wires the pre-commit hook into `.husky/` (if husky
    is present) or `.git/hooks/pre-commit`, and copies
    `.github/workflows/a11y.yml` along with `.icansee/routes.json`.
-3. Walk the user through the routes file. List the routes that exercise
-   the UI surface that matters. Default is `["/"]`.
+3. Walk the user through `.icansee/routes.json`. List the routes that
+   exercise the UI surface that matters. Default is `["/"]` (light mode
+   only). To sweep dark mode too, use the v0.3 object form:
+   `{"routes": ["/"], "modes": ["light", "dark"]}`.
 4. Suggest a smoke test: stage an intentional violation and try to
    commit.
 5. If the user is **not** on GitHub Actions, point them at
@@ -159,9 +161,11 @@ review`. Each finding includes:
   all three layers; `--no-pre-push`, `--no-ci`, `--no-hook` opt out
   individually.
 - `scripts/audit.sh`: pre-commit entrypoint and CLI runner.
-- `scripts/rendered_audit.sh`: pre-push entrypoint. Build, serve,
-  axe-core. Honors `BUILD_CMD`, `SERVE_CMD`, `BASE_URL` env or
-  `.icansee/env` file.
+- `scripts/rendered_audit.sh`: pre-push entrypoint. Build, serve, hand
+  off to `.icansee/axe-runner.mjs` (Playwright + `@axe-core/playwright`).
+  Honors `BUILD_CMD`, `SERVE_CMD`, `BASE_URL` env or `.icansee/env` file.
+- `templates/axe-runner.mjs`: the per-route × per-mode axe runner. Copied
+  to `.icansee/axe-runner.mjs` at install time.
 - `scripts/contrast.py`: exact WCAG ratio plus suggest.
 - `scripts/palette_audit.py`: token matrix audit.
 - `scripts/html_audit.py`: stdlib static HTML a11y check.
@@ -169,7 +173,8 @@ review`. Each finding includes:
 - `templates/pre-commit`: git pre-commit hook script.
 - `templates/pre-push`: git pre-push hook script (skips when only docs
   change).
-- `templates/github-workflow-a11y.yml`: CI workflow that runs axe-core.
+- `templates/github-workflow-a11y.yml`: CI workflow that runs the same
+  Playwright + axe runner.
 - `docs/`: full human-readable documentation, organized via the
   [Diátaxis](https://diataxis.fr) framework. Start at
   [docs/README.md](docs/README.md). Sections:

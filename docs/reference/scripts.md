@@ -120,9 +120,11 @@ the parent environment override `.icansee/env`.
 - Runs `BUILD_CMD` if non-empty.
 - Starts `SERVE_CMD` in the background.
 - Waits via `npx --yes wait-on "$BASE_URL"` up to `WAIT_TIMEOUT` ms.
-- Runs `npx --yes @axe-core/cli "$BASE_URL$route"
-  --tags wcag2a,wcag2aa,wcag21a,wcag21aa --exit` for each route in
-  `.icansee/routes.json` (or `["/"]` if the file is missing).
+- Hands off to `node .icansee/axe-runner.mjs` (Playwright +
+  `@axe-core/playwright`), which iterates every `route × color-mode`
+  combination from `.icansee/routes.json` with the WCAG tag set
+  `wcag2a,wcag2aa,wcag21a,wcag21aa`. Defaults to `["/"]` and
+  `["light"]` when the file is missing.
 - Logs server output to `/tmp/icansee-serve.log`.
 - Kills the server on exit (any code path, via trap).
 
@@ -130,9 +132,9 @@ the parent environment override `.icansee/env`.
 
 | Code | Meaning                                                       |
 | ---- | ------------------------------------------------------------- |
-| 0    | Audit clean across all routes.                                |
-| 1    | Build failed, server didn't come up, or any route had findings. |
-| 2    | Not inside a git repo.                                        |
+| 0    | Audit clean across all routes and modes.                      |
+| 1    | Build failed, server didn't come up, or any route × mode had findings. |
+| 2    | Not inside a git repo, missing `.icansee/axe-runner.mjs`, or runner infra error (e.g. chromium missing). |
 
 ---
 

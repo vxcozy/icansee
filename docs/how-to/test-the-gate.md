@@ -38,8 +38,9 @@ Overrides the staged-files default. Files don't need to be tracked by git.
 ~/.claude/skills/icansee/scripts/rendered_audit.sh
 ```
 
-Builds, serves, runs `@axe-core/cli`. Same as the pre-push hook. Useful if
-you want to verify a rendered fix without pushing.
+Builds, serves, runs Playwright + `@axe-core/playwright` per route ×
+color mode from `.icansee/routes.json`. Same as the pre-push hook.
+Useful if you want to verify a rendered fix without pushing.
 
 ## Run only the contrast script
 

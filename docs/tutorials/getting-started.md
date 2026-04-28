@@ -164,8 +164,8 @@ the commit through.
 
 If you have Node installed, you can manually run the pre-push layer too.
 It builds the project (skipped here since there's nothing to build),
-starts a local server, and runs `@axe-core/cli` against the routes in
-`.icansee/routes.json`.
+starts a local server, and runs Playwright + `@axe-core/playwright`
+against every route × color-mode combination in `.icansee/routes.json`.
 
 ```bash
 ~/.claude/skills/icansee/scripts/rendered_audit.sh
@@ -176,8 +176,12 @@ Behind the scenes:
 1. Detects there's no `npm run build` script and skips the build step.
 2. Falls back to `npx serve -s . -p 3000` to serve the static files.
 3. Waits for `http://localhost:3000` to come up.
-4. Runs `npx @axe-core/cli http://localhost:3000/` with the WCAG A/AA
-   tags.
+4. Hands off to `node .icansee/axe-runner.mjs`, which launches
+   Playwright's chromium and runs axe-core against
+   `http://localhost:3000/` with the WCAG A/AA tags. Color modes
+   default to `["light"]`; set `"modes": ["light", "dark"]` in
+   `.icansee/routes.json` to also sweep dark mode via
+   `prefers-color-scheme` emulation.
 5. Kills the server.
 
 Because the page is clean, the rendered audit also passes. If we'd left
